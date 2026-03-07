@@ -1,0 +1,3 @@
+VIAL_ENABLE = yes
+VIA_ENABLE = yes
+QMK_SETTINGS = yes
