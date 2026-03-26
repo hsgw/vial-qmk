@@ -1,0 +1,6 @@
+SRC += cy8cmbr3108.c
+SRC += pmw3610.c
+
+POINTING_DEVICE_DRIVER = custom
+
+I2C_DRIVER_REQUIRED = yes
