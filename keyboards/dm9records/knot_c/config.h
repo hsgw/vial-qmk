@@ -16,4 +16,4 @@
 
 // Enable this to use debug features (delayed init, console logs).
 // Requires CONSOLE_ENABLE = yes in rules.mk
-#define KNOT_C_DEBUG
+// #define KNOT_C_DEBUG
