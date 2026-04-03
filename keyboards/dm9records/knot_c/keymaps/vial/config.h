@@ -16,6 +16,7 @@
 // CPI = 200 * (N+1)
 #define DEFAULT_CPI 3
 #define DEFAULT_SCROLL_DIVISOR 16
+#define DEFAULT_DISABLE_H_SCROLL 0
 
 // high resolution scroll settings
 #define POINTING_DEVICE_HIRES_SCROLL_MULTIPLIER 12

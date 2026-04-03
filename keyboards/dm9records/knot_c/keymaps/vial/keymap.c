@@ -12,10 +12,10 @@
 typedef union {
     uint32_t raw;
     struct {
-        uint8_t  cpi_coeff; // CPI / 200 - 1 (0 = 200, 1 = 400, ...)
+        uint8_t  cpi_coeff;        // CPI / 200 - 1 (0 = 200, 1 = 400, ...)
+        uint8_t  disable_h_scroll; // 1 to disable horizontal scroll in scroll mode
         uint16_t scroll_divisor;
-        uint8_t  reserved; // Reserved for future use
-    };
+    } __attribute__((packed));
 } knot_c_config_t;
 
 knot_c_config_t knot_c_config;
@@ -46,8 +46,9 @@ void knot_c_config_save(void) {
 }
 
 void knot_c_config_reset(void) {
-    knot_c_config.cpi_coeff      = DEFAULT_CPI;
-    knot_c_config.scroll_divisor = DEFAULT_SCROLL_DIVISOR;
+    knot_c_config.cpi_coeff        = DEFAULT_CPI;
+    knot_c_config.scroll_divisor   = DEFAULT_SCROLL_DIVISOR;
+    knot_c_config.disable_h_scroll = DEFAULT_DISABLE_H_SCROLL;
 }
 
 void keyboard_post_init_user(void) {
@@ -76,7 +77,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #ifdef POINTING_DEVICE_HIRES_SCROLL_ENABLE
 report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     if (IS_LAYER_ON(_SCROLL)) {
-        mouse_report.h = mouse_report.x;
+        mouse_report.h = knot_c_config.disable_h_scroll ? 0 : mouse_report.x;
         mouse_report.v = -mouse_report.y;
 
         // Prevent mouse cursor from moving
@@ -96,15 +97,17 @@ static int16_t scroll_y_remainder = 0;
 report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     if (IS_LAYER_ON(_SCROLL)) {
         // Accumulate trackball movement to capture slow rotations
-        scroll_x_remainder += mouse_report.x;
+        if (!knot_c_config.disable_h_scroll) {
+            scroll_x_remainder += mouse_report.x;
+            mouse_report.h = scroll_x_remainder / knot_c_config.scroll_divisor;
+            scroll_x_remainder %= knot_c_config.scroll_divisor;
+        } else {
+            mouse_report.h     = 0;
+            scroll_x_remainder = 0;
+        }
+
         scroll_y_remainder -= mouse_report.y; // Invert Y for natural scrolling
-
-        // Calculate scroll amount based on accumulated values and divisor
-        mouse_report.h = scroll_x_remainder / knot_c_config.scroll_divisor;
         mouse_report.v = scroll_y_remainder / knot_c_config.scroll_divisor;
-
-        // Keep the remainder for the next task cycle
-        scroll_x_remainder %= knot_c_config.scroll_divisor;
         scroll_y_remainder %= knot_c_config.scroll_divisor;
 
         // Prevent mouse cursor from moving
@@ -148,14 +151,17 @@ void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
                 // Scroll_divisor remains in data[9] and data[10]
                 data[9]  = (knot_c_config.scroll_divisor >> 8) & 0xFF;
                 data[10] = knot_c_config.scroll_divisor & 0xFF;
+                // Assign disable_h_scroll to data[11]
+                data[11] = knot_c_config.disable_h_scroll;
                 // Update length for the new data byte
-                length = 11;
+                length = 12;
                 // Success response
                 data[1] = 0xFD;
                 break;
             case 0x02: // Set settings (RAM only)
-                knot_c_config.cpi_coeff      = data[2];
-                knot_c_config.scroll_divisor = (data[3] << 8) | data[4];
+                knot_c_config.cpi_coeff        = data[2];
+                knot_c_config.scroll_divisor   = (data[3] << 8) | data[4];
+                knot_c_config.disable_h_scroll = data[5];
                 // Re-apply CPI to sensor immediately
                 pmw3610_set_cpi_wrapper((knot_c_config.cpi_coeff + 1) * 200);
                 // Success response
