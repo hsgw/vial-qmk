@@ -263,6 +263,20 @@ uint16_t pmw3610_get_cpi_wrapper(void) {
 report_mouse_t pmw3610_get_report(report_mouse_t mouse_report) {
     static bool in_motion = false;
     uint8_t     motion    = pmw3610_read(0, PMW3610_REG_MOTION);
+
+#ifdef KNOT_C_DEBUG
+    // overflow check
+    if (motion & 0x10) uprintf("!!!! overflow !!!!\n");
+
+    uint8_t squal    = pmw3610_read(0, PMW3610_REG_SQUAL);
+    uint8_t shutterh = pmw3610_read(0, PMW3610_REG_SHUTTER_HIGHER);
+    uint8_t shutterl = pmw3610_read(0, PMW3610_REG_SHUTTER_LOWER);
+
+    int16_t shutter = shutterl + (shutterh << 8);
+
+    uprintf("squal: %d, shutter: %d\n", squal, shutter);
+#endif
+
     if (!(motion & PMW3610_MOTION_BIT)) {
         in_motion = false;
         return mouse_report;
@@ -279,6 +293,7 @@ report_mouse_t pmw3610_get_report(report_mouse_t mouse_report) {
 
     mouse_report.x = CONSTRAIN_HID_XY(dx);
     mouse_report.y = CONSTRAIN_HID_XY(dy);
+
     return mouse_report;
 }
 

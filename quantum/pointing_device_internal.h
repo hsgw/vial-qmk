@@ -6,7 +6,7 @@
 #ifdef POINTING_DEVICE_DEBUG
 #    include "debug.h"
 #    include "print.h"
-#    define pd_dprintf(...) dprintf(__VA_ARGS__)
+#    define pd_dprintf(...) uprintf(__VA_ARGS__)
 #else
 #    define pd_dprintf(...) \
         do {                \
