@@ -238,6 +238,10 @@ bool pmw3610_init(uint8_t sensor) {
     // set_downshift_time(sensor, PMW3610_REG_REST2_DOWNSHIFT, TODO);
     // set_sample_time(sensor, PMW3610_REG_REST2_PERIOD, TODO);
     // set_sample_time(sensor, PMW3610_REG_REST3_PERIOD, TODO);
+
+    // set smart algorithm
+    pmw3610_write(0, PMW3610_REG_RESERVED, PMW3610_ENABLE_SMART);
+
     return true;
 }
 
@@ -271,10 +275,9 @@ report_mouse_t pmw3610_get_report(report_mouse_t mouse_report) {
     uint8_t squal    = pmw3610_read(0, PMW3610_REG_SQUAL);
     uint8_t shutterh = pmw3610_read(0, PMW3610_REG_SHUTTER_HIGHER);
     uint8_t shutterl = pmw3610_read(0, PMW3610_REG_SHUTTER_LOWER);
+    int16_t shutter  = shutterl + (shutterh << 8);
+    uprintf("m: %3d, s: %3d, s: %3d\n", motion, squal, shutter);
 
-    int16_t shutter = shutterl + (shutterh << 8);
-
-    uprintf("squal: %d, shutter: %d\n", squal, shutter);
 #endif
 
     if (!(motion & PMW3610_MOTION_BIT)) {
