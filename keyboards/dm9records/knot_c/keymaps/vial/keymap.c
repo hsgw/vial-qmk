@@ -12,9 +12,9 @@
 typedef union {
     uint32_t raw;
     struct {
-        uint8_t  cpi_coeff;        // CPI / 200 - 1 (0 = 200, 1 = 400, ...)
-        uint8_t  disable_h_scroll; // 1 to disable horizontal scroll in scroll mode
-        uint16_t scroll_divisor;
+        uint8_t cpi_coeff;        // CPI / 200 - 1 (0 = 200, 1 = 400, ...)
+        uint8_t scroll_divisor;   // Divisor to scale scroll movement
+        uint8_t disable_h_scroll; // 1 to disable horizontal scroll in scroll mode
     } __attribute__((packed));
 } knot_c_config_t;
 
@@ -73,46 +73,36 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 // clang-format on
 
+// Accumulators for scrolling (avoid losing slow movements)
+static int32_t scroll_x_remainder = 0;
+static int32_t scroll_y_remainder = 0;
+
 // Handle trackball to High Resolution Scroll conversion
-#ifdef POINTING_DEVICE_HIRES_SCROLL_ENABLE
 report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
     if (IS_LAYER_ON(_SCROLL)) {
-        mouse_report.h = knot_c_config.disable_h_scroll ? 0 : mouse_report.x;
-        mouse_report.v = -mouse_report.y;
+        int16_t delta_x = mouse_report.x;
+        int16_t delta_y = -mouse_report.y; // Invert Y for natural scrolling
 
         // Prevent mouse cursor from moving
         mouse_report.x = 0;
         mouse_report.y = 0;
-    }
 
-    return mouse_report;
-}
-#else
+        const int32_t divisor = (int32_t)knot_c_config.scroll_divisor;
 
-// Accumulators for smooth scrolling (avoid losing slow movements)
-static int16_t scroll_x_remainder = 0;
-static int16_t scroll_y_remainder = 0;
-
-// Handle trackball to High Resolution Scroll conversion
-report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
-    if (IS_LAYER_ON(_SCROLL)) {
-        // Accumulate trackball movement to capture slow rotations
-        if (!knot_c_config.disable_h_scroll) {
-            scroll_x_remainder += mouse_report.x;
-            mouse_report.h = scroll_x_remainder / knot_c_config.scroll_divisor;
-            scroll_x_remainder %= knot_c_config.scroll_divisor;
-        } else {
-            mouse_report.h     = 0;
+        // Handle Horizontal Scroll
+        if (knot_c_config.disable_h_scroll) {
             scroll_x_remainder = 0;
+            mouse_report.h     = 0;
+        } else {
+            scroll_x_remainder += (int32_t)delta_x;
+            mouse_report.h = (int8_t)(scroll_x_remainder / divisor);
+            scroll_x_remainder %= divisor;
         }
 
-        scroll_y_remainder -= mouse_report.y; // Invert Y for natural scrolling
-        mouse_report.v = scroll_y_remainder / knot_c_config.scroll_divisor;
-        scroll_y_remainder %= knot_c_config.scroll_divisor;
-
-        // Prevent mouse cursor from moving
-        mouse_report.x = 0;
-        mouse_report.y = 0;
+        // Handle Vertical Scroll
+        scroll_y_remainder += (int32_t)delta_y;
+        mouse_report.v = (int8_t)(scroll_y_remainder / divisor);
+        scroll_y_remainder %= divisor;
     } else {
         // Reset remainders when not in scroll mode to avoid "ghost" scrolling
         scroll_x_remainder = 0;
@@ -121,12 +111,23 @@ report_mouse_t pointing_device_task_user(report_mouse_t mouse_report) {
 
     return mouse_report;
 }
-#endif
 
 /**
  * @brief Handle custom HID commands for configuration
- * data[0]: 0xFC (Custom ID)
- * data[1]: Command (0x01: Get/Identify, 0x02: Set, 0x03: Save)
+ *
+ * Protocol Definition (Custom ID: 0xFC)
+ *
+ * Command 0x01: Get Settings / Identify
+ *   Request:  [0xFC, 0x01]
+ *   Response: [0xFC, 0xFD, 'K', 'N', 'O', 'T', Version(0x01), HiresEnabled(0/1), CPI, Divisor, DisableHScroll]
+ *
+ * Command 0x02: Set Settings (RAM only)
+ *   Request:  [0xFC, 0x02, CPI, Divisor, DisableHScroll]
+ *   Response: [0xFC, 0xFD]
+ *
+ * Command 0x03: Save Settings (EEPROM)
+ *   Request:  [0xFC, 0x03]
+ *   Response: [0xFC, 0xFD]
  */
 void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
     if (data[0] == 0xFC) {
@@ -140,28 +141,22 @@ void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
                 // Protocol Version
                 data[6] = 0x01;
                 // Current Settings
-                // Assign smooth scroll flag to data[7] based on POINTING_DEVICE_HIRES_SCROLL_ENABLE
 #ifdef POINTING_DEVICE_HIRES_SCROLL_ENABLE
-                data[7] = 1;
+                data[7] = 1; // High Resolution Scroll is enabled in firmware
 #else
-                data[7] = 0;
+                data[7] = 0; // Regular Scroll is enabled in firmware
 #endif
-                // Assign CPI coefficient to data[8]
-                data[8] = knot_c_config.cpi_coeff;
-                // Scroll_divisor remains in data[9] and data[10]
-                data[9]  = (knot_c_config.scroll_divisor >> 8) & 0xFF;
-                data[10] = knot_c_config.scroll_divisor & 0xFF;
-                // Assign disable_h_scroll to data[11]
-                data[11] = knot_c_config.disable_h_scroll;
-                // Update length for the new data byte
-                length = 12;
+                data[8]  = knot_c_config.cpi_coeff;
+                data[9]  = knot_c_config.scroll_divisor;
+                data[10] = knot_c_config.disable_h_scroll;
+                length   = 11;
                 // Success response
                 data[1] = 0xFD;
                 break;
             case 0x02: // Set settings (RAM only)
                 knot_c_config.cpi_coeff        = data[2];
-                knot_c_config.scroll_divisor   = (data[3] << 8) | data[4];
-                knot_c_config.disable_h_scroll = data[5];
+                knot_c_config.scroll_divisor   = data[3];
+                knot_c_config.disable_h_scroll = data[4];
                 // Re-apply CPI to sensor immediately
                 pmw3610_set_cpi_wrapper((knot_c_config.cpi_coeff + 1) * 200);
                 // Success response
