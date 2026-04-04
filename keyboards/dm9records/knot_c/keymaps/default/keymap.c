@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include QMK_KEYBOARD_H
+#include "knot_c.h"
 
 // Adjustment factor for scroll sensitivity
 // Increase this value to slow down the scroll speed.

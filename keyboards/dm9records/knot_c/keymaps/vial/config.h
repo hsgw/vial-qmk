@@ -13,12 +13,4 @@
 
 #define DYNAMIC_KEYMAP_LAYER_COUNT 6
 
-// CPI = 200 * (N+1) = 800
-#define DEFAULT_CPI 3
-#define DEFAULT_SCROLL_DIVISOR 16
-#define DEFAULT_DISABLE_H_SCROLL 0
-
-// high resolution scroll settings
-#define POINTING_DEVICE_HIRES_SCROLL_MULTIPLIER 12
-// #define POINTING_DEVICE_HIRES_SCROLL_EXPONENT 0
-// #define POINTING_DEVICE_HIRES_SCROLL_ENABLE 1
+// Defaults are now defined at the keyboard level in knot_c/config.h
